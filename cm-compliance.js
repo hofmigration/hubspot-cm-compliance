@@ -17,7 +17,7 @@ const checkMentions = require("./5-check-mentions");
 const { composeNote, postNote } = require("./6-note");
 const ai = require("./0-ai");
 
-const PRIORITY = { mention: 1, clientreply: 2, tone: 3, email: 4, task: 5 };
+const PRIORITY = { mention: 1, clientreply: 2, tone: 3, email: 4, task: 5, calldesc: 6 };
 const dealLink = (id) => `https://app.hubspot.com/contacts/${SETTINGS.PORTAL_ID}/record/0-3/${id}`;
 
 async function main() {
