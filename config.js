@@ -49,9 +49,11 @@ const SETTINGS = {
     ["In Progress", "In Process"]),
 
   // ---- mention chase (the critical one) ----
-  // A note is only chased once it has been sitting for this long, so a reply made
-  // shortly after the tag is never chased.
+  // A note is chased only in a BOUNDED window: old enough that a reply has clearly
+  // not come, but not ancient. Without the upper bound the agent kept chasing notes
+  // from months ago, over and over, every single run.
   MENTION_MIN_AGE_HOURS: 48,
+  MENTION_MAX_AGE_HOURS: 72,   // so each run picks up notes that just passed 48h
   // Only notes WRITTEN BY one of the case managers, or MENTIONING one of them.
   MENTION_ONLY_OUR_TEAM: true,
   // IMPORTANT: HubSpot does not expose note COMMENTS through its API, so a reply
@@ -79,6 +81,7 @@ const SETTINGS = {
   CHECK_CALL_EMAIL: true,      // call logged but no follow-up email (AI decides if needed)
   CHECK_CLIENT_REPLY: true,    // client asked something and got no reply
   CHECK_TONE: true,            // our reply tone
+  CHECK_CALL_DESCRIPTION: true,// a call where the client was reached must say what happened
   CHECK_MENTIONS: true,        // tagged and not answered
   REPLY_DUE_HOURS: 24,
 };
