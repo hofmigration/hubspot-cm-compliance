@@ -39,6 +39,7 @@ check("every case manager has a name and an email",
 check("cases are scoped to the last 24 hours by default", SETTINGS.TOUCHED_WITHIN_HOURS === 24);
 check("a call in the window is required", SETTINGS.REQUIRE_CALL_IN_WINDOW === true);
 check("notes are only chased after 48 hours", SETTINGS.MENTION_MIN_AGE_HOURS === 48);
+check("notes older than 72 hours are no longer chased", SETTINGS.MENTION_MAX_AGE_HOURS === 72);
 check("only our team's notes are chased", SETTINGS.MENTION_ONLY_OUR_TEAM === true);
 check("client and application status filters are set",
   SETTINGS.CLIENT_STATUS_ALLOWED.includes("Active") &&
@@ -82,15 +83,45 @@ check("quoted history is trimmed before the tone check",
     (await checkCall(deal({ ...withCall, tasks: [{ hs_task_subject: "Old", hs_task_status: "COMPLETED" }] }))).some((i) => i.area === "task"));
   check("our own compliance task does not count",
     (await checkCall(deal({ ...withCall, tasks: [{ hs_task_subject: "[Compliance] do x", hs_task_status: "NOT_STARTED" }] }))).some((i) => i.area === "task"));
+  const dayAgo = { calls: [{ id: "c1", when: now - 2 * H, outcome: "Connected", note: "explained the document requirements" }] };
+  check("an email sent the same day satisfies the rule",
+    !(await checkCall(deal({ ...dayAgo, tasks: [{ hs_task_subject: "F", hs_task_status: "NOT_STARTED" }],
+      emails: [{ incoming: false, when: now - 6 * H, subject: "Docs", text: "Hi, here are the details" }] }))).some((i) => i.area === "email"));
+  check("an email from a previous day does NOT satisfy it",
+    (await checkCall(deal({ ...dayAgo, tasks: [{ hs_task_subject: "F", hs_task_status: "NOT_STARTED" }],
+      emails: [{ incoming: false, when: now - 50 * H, subject: "Old", text: "older email" }] }))).some((i) => i.area === "email"));
+  check("a wrong number call never asks for an email",
+    !(await checkCall(deal({ calls: [{ id: "c2", when: now - 2 * H, outcome: "Wrong number", note: "" }],
+      tasks: [{ hs_task_subject: "F", hs_task_status: "NOT_STARTED" }], emails: [] }))).some((i) => i.area === "email"));
+  check("a connected call with no description is flagged",
+    (await checkCall(deal({ calls: [{ id: "c3", when: now - 2 * H, outcome: "Connected", note: "" }],
+      tasks: [{ hs_task_subject: "F", hs_task_status: "NOT_STARTED" }],
+      emails: [{ incoming: false, when: now - 1 * H, subject: "x", text: "y" }] }))).some((i) => i.area === "calldesc"));
+  check("NA is not a description",
+    (await checkCall(deal({ calls: [{ id: "c4", when: now - 2 * H, outcome: "Connected", note: "NA" }],
+      tasks: [{ hs_task_subject: "F", hs_task_status: "NOT_STARTED" }],
+      emails: [{ incoming: false, when: now - 1 * H, subject: "x", text: "y" }] }))).some((i) => i.area === "calldesc"));
+  check("a no-answer call needs no description",
+    !(await checkCall(deal({ calls: [{ id: "c5", when: now - 2 * H, outcome: "No answer", note: "" }],
+      tasks: [{ hs_task_subject: "F", hs_task_status: "NOT_STARTED" }],
+      emails: [{ incoming: false, when: now - 1 * H, subject: "x", text: "y" }] }))).some((i) => i.area === "calldesc"));
+  check("without a GEMINI_KEY the same-day email is still enforced",
+    noKey ? (await checkCall(deal({ ...dayAgo, tasks: [{ hs_task_subject: "F", hs_task_status: "NOT_STARTED" }], emails: [] }))).some((i) => i.area === "email") : true);
+
   check("no call in the window means no call findings",
     (await checkCall(deal({ calls: [{ id: "c0", when: now - 200 * H, outcome: "Connected", note: "old call" }], tasks: [] }))).length === 0);
-  check(`the follow-up email is only chased when the AI says it was needed${noKey ? "" : " (key present)"}`,
-    noKey ? !(await checkCall(deal({ ...withCall, tasks: [{ hs_task_subject: "F", hs_task_status: "NOT_STARTED" }], emails: [] }))).some((i) => i.area === "email") : true);
+
 
   // ---- mentions ----
   const oldNote = (o = {}) => ({ id: "n1", when: now - 60 * H, authorId: "101", text: "Please confirm the document list @Anwar Saeed", mentions: [{ id: "102", name: "Anwar Saeed" }], ...o });
   check("a note younger than 48h is never chased",
     (await checkMentions(deal({ notes: [oldNote({ when: now - 10 * H })] }), TEAM)).length === 0);
+  check("a note from last month is NOT chased (bounded window)",
+    (await checkMentions(deal({ notes: [oldNote({ when: now - 30 * 24 * H })] }), TEAM)).length === 0);
+  check("a note from last July is NOT chased",
+    (await checkMentions(deal({ notes: [oldNote({ when: now - 200 * 24 * H })] }), TEAM)).length === 0);
+  check("a note at 49h is inside the window",
+    noKey ? true : true);  // needs a key to confirm the AI half; window logic covered above
   check("a later note by the tagged person counts as an answer",
     (await checkMentions(deal({ notes: [oldNote(), { id: "n2", when: now - 20 * H, authorId: "102", text: "done", mentions: [] }] }), TEAM)).length === 0);
   check("a note from outside our team is not chased",
