@@ -75,7 +75,7 @@ async function attach(deal, dispoMap) {
     batchRead("calls", callA.ids, ["hs_call_body", "hs_call_title", "hs_call_disposition", "hs_timestamp", "hs_createdate", "hubspot_owner_id"]),
     batchRead("emails", emailA.ids, ["hs_email_subject", "hs_email_text", "hs_email_html", "hs_email_direction", "hs_timestamp", "hs_createdate"]),
     batchRead("tasks", taskA.ids, ["hs_task_subject", "hs_task_status", "hs_timestamp", "hs_createdate"]),
-    batchRead("notes", noteA.ids, ["hs_note_body", "hs_body_preview", "hs_timestamp", "hs_createdate", "hubspot_owner_id", "hs_created_by"]),
+    batchRead("notes", noteA.ids, ["hs_note_body", "hs_body_preview", "hs_timestamp", "hs_createdate", "hubspot_owner_id", "hs_created_by", "hs_attachment_ids"]),
     batchRead("contacts", contactA.ids, ["firstname", "lastname", "email"]),
   ]);
 
@@ -110,6 +110,9 @@ async function attach(deal, dispoMap) {
       authorId: String(pr.hubspot_owner_id || pr.hs_created_by || ""),
       text: pr.hs_body_preview || strip(pr.hs_note_body),
       mentions: mentionsIn(pr.hs_note_body),
+      // a document on the note changes the meaning entirely: "@X <file>" is a
+      // hand-over of a document, not a request for anything
+      attachments: String(pr.hs_attachment_ids || "").split(/[;,]/).filter(Boolean).length,
       raw: pr.hs_note_body || "",
     };
   }).sort((a, b) => b.when - a.when).slice(0, SETTINGS.MAX_NOTES_PER_DEAL);
