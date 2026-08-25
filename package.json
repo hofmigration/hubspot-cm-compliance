@@ -1,0 +1,9 @@
+{
+  "name": "hubspot-cm-compliance",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Case manager compliance for HOF Migration (HubSpot).",
+  "type": "commonjs",
+  "engines": { "node": ">=18" },
+  "scripts": { "start": "node cm-compliance.js", "test": "node selftest.js" }
+}

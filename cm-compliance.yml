@@ -1,0 +1,106 @@
+name: Case Manager Compliance
+
+on:
+  schedule:
+    # 05:40 UTC = 10:40 AM PKT, between the contact and deal audits.
+    - cron: "40 5 * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Dry run (safe test, posts nothing)?"
+        required: true
+        type: choice
+        default: "true"
+        options:
+          - "true"
+          - "false"
+      hours_back:
+        description: "Audit cases touched in the last N HOURS (a call must be logged in that window). Type any number."
+        required: true
+        default: "24"
+        type: string
+      client_status:
+        description: "Client status"
+        required: true
+        type: choice
+        default: "Active"
+        options:
+          - "Active"
+          - "all"
+          - "Inactive"
+          - "On Hold"
+          - "Refunded"
+          - "Closed"
+      application_status:
+        description: "Application status (In Progress + In Process are both used by default)"
+        required: true
+        type: choice
+        default: "In Progress + In Process"
+        options:
+          - "In Progress + In Process"
+          - "all"
+          - "In Progress"
+          - "In Process"
+          - "On Hold"
+          - "Completed"
+          - "Withdrawn"
+      limit:
+        description: "How many cases to audit"
+        required: true
+        type: choice
+        default: "all"
+        options:
+          - "all"
+          - "25"
+          - "50"
+          - "100"
+          - "250"
+      case_manager:
+        description: "Audit one case manager only"
+        required: false
+        type: choice
+        default: "all"
+        options:
+          - "all"
+          - "Brenda Murowanidzwa"
+          - "Yamina Sadi"
+          - "Ali Tariq"
+          - "Anwar Saeed"
+          - "Tamjeed Zahid"
+          - "Thushara M S"
+          - "Rahima Nabili"
+          - "Warda Badar"
+          - "Umer Masaud"
+          - "Hashim Tahir"
+          - "Muhammad Zaryab"
+          - "Maryam Chand"
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Check the compliance rules still work
+        run: node selftest.js
+      - name: Translate the status choices
+        id: st
+        run: |
+          if [ "${{ inputs.application_status }}" = "In Progress + In Process" ]; then
+            echo "app=In Progress|In Process" >> $GITHUB_OUTPUT
+          else
+            echo "app=${{ inputs.application_status }}" >> $GITHUB_OUTPUT
+          fi
+      - run: node cm-compliance.js
+        env:
+          HUBSPOT_TOKEN: ${{ secrets.HUBSPOT_TOKEN }}
+          GEMINI_KEY: ${{ secrets.GEMINI_KEY }}
+          DRY_RUN_INPUT: ${{ inputs.dry_run }}
+          HOURS_INPUT: ${{ inputs.hours_back }}
+          CLIENT_STATUS_INPUT: ${{ inputs.client_status }}
+          APPLICATION_STATUS_INPUT: ${{ steps.st.outputs.app }}
+          LIMIT_INPUT: ${{ inputs.limit }}
+          CASE_MANAGER_INPUT: ${{ inputs.case_manager }}
