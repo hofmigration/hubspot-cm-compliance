@@ -29,13 +29,22 @@ Every case is read by the AI before anything is posted.
 | Check | Rule |
 |---|---|
 | **Next task** | A call was logged but there is no **open** task for the next follow up. Completed tasks and our own `[Compliance]` tasks don't count. |
-| **Follow-up email** | A call was logged and no email followed — **but only when the call actually needed one**. The call notes are read first: documents or information requested, a process or fee explained, something promised or agreed → email needed. No answer, wrong number, or a courtesy call → no email needed. |
+| **Same-day email** | A call was logged and **no email went out that same day** (PKT calendar day, so an email sent earlier that day counts). An email is assumed to be **required**; only a clear reason excuses it — a wrong number, or the client merely acknowledging something already sent. An empty or vague call note is **never** an excuse. |
+| **Call description** | A call where the client was reached must say what was discussed. `NA`, `-`, `.` do not count. |
 | **Client waiting** | A client email that **needed a reply** and hasn't had one after 24h. Thank-yous, acknowledgements, auto-replies and plain document drops are never chased — the email is read to decide whether an answer was required. |
 | **Our email tone** | Only genuinely rude, sarcastic, dismissive or aggressive wording. Blunt, firm or bad-news emails are not flagged. |
-| **Tagged and no reply** | Someone was @mentioned on a note and never answered. See below. |
+| **Tagged and no reply** | Someone was @mentioned on a note **48–72 hours ago** and never answered. See below. |
 
 Only the **3 most important** issues go in a note: tagged-no-reply → client waiting →
-tone → follow-up email → next task.
+tone → same-day email → next task → call description.
+
+Every flag is written as a **note on the case in HubSpot**, tagging the responsible
+person with a real HubSpot @mention, posted as Ali Raza:
+
+> Hi **@Warda Badar**
+> A call was made and no email was sent to the client the same day, kindly send the follow up email
+> Also create the next follow up task on the case
+> Thank you
 
 ---
 
@@ -49,8 +58,8 @@ who owes the reply**, not the case owner.
 through its API — no script can read them, and there isn't even a comment count. So a
 reply left as a comment is invisible here. Four guards keep this fair:
 
-1. a note is only chased once it is **48 hours old** — nearly all comment replies
-   happen within hours, so the wait removes most of the risk
+1. a note is only chased in a **bounded 48–72 hour window** — old enough that a reply
+   clearly has not come, but never months old, so nothing is chased twice
 2. only notes **written by, or tagging, one of the 12** are considered
 3. **any later note by that person on the case counts as an answer**, because replies
    are often written as a fresh note rather than a comment
@@ -84,12 +93,12 @@ Scheduled daily at **10:40 AM PKT**.
 ## Changing the rules
 
 Every rule is a scenario in `selftest.js`. Run `node selftest.js` after any edit —
-it reports `34 passed, 0 failed` and names anything that broke. The workflow runs it
+it reports `44 passed, 0 failed` and names anything that broke. The workflow runs it
 before auditing, so a broken rule stops the run instead of posting wrong notes.
 
 ## Tuning (`config.js`)
 
-`TOUCHED_WITHIN_HOURS` · `REQUIRE_CALL_IN_WINDOW` · `MENTION_MIN_AGE_HOURS` (48) ·
+`TOUCHED_WITHIN_HOURS` · `REQUIRE_CALL_IN_WINDOW` · `MENTION_MIN_AGE_HOURS` (48) · `MENTION_MAX_AGE_HOURS` (72) · `CHECK_CALL_DESCRIPTION` ·
 `MENTION_ONLY_OUR_TEAM` · `REPLY_DUE_HOURS` (24) · `MAX_ISSUES_PER_DEAL` ·
 `MAX_AI_CALLS` · `CHECK_CALL_TASK` · `CHECK_CALL_EMAIL` · `CHECK_CLIENT_REPLY` ·
 `CHECK_TONE` · `CHECK_MENTIONS`
