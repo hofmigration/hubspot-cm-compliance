@@ -7,45 +7,61 @@
 // KNOWN BLIND SPOT, handled deliberately:
 // HubSpot does NOT expose note COMMENTS through its API, so a reply left as a comment
 // is invisible to any script. Four guards keep this fair:
-//   1. a note is only chased once it is MENTION_MIN_AGE_HOURS old (48h) — most comment
-//      replies happen within hours, so the wait removes nearly all of the risk
+//   1. a note is only chased inside a BOUNDED window — old enough that a reply has
+//      clearly not come (48h), but not ancient (72h). Without the upper bound the
+//      agent chased notes from months ago on every run.
 //   2. only notes written by, or mentioning, one of our case managers are considered
 //   3. any LATER note by the mentioned person on the same case counts as an answer,
 //      because a reply is often written as a fresh note rather than a comment
-//   4. the AI must first agree the note actually ASKS that person for something —
-//      documents dropped in, FYI notes and summaries are never chased
+//   4. the AI must first agree the note actually ASKS that person to DO or ANSWER
+//      something. Attachments are counted and told to the AI, because "@Name Excel
+//      Sheet" with a file on it is a document hand-over, not a request.
 // The note we post also invites anyone who did reply in a comment to ignore it.
 const { SETTINGS } = require("./config");
 const { askJson } = require("./0-ai");
 
-const PROMPT = (text, names) => `You audit an immigration consultancy's CRM. A team member wrote a note on a client case and tagged ${names}. Decide whether that note is ASKING the tagged person for something they must respond to.
+const PROMPT = (text, names, attachments) => `You audit an immigration consultancy's CRM. A team member wrote a note on a client case and tagged ${names}. Read it the way a manager would and decide whether the note is ASKING the tagged person to DO something or ANSWER something.
 
-NEEDS A RESPONSE (true) when the note asks them to do something, asks a question, requests information, a decision, a review, or an action from them, or hands the case over to them.
+${attachments ? `IMPORTANT: this note has ${attachments} document(s) attached.` : "This note has no attachment."}
 
-NO RESPONSE NEEDED (false) when the note is:
-- information, an update, a summary or a CV/document write-up shared for awareness
-- attaching or recording documents, with nothing being asked
-- an FYI, a heads-up, or simply naming who handles the case
-- thanking or acknowledging them
-- anything where nothing is actually being asked of the tagged person
+NEEDS A RESPONSE (true) ONLY when the note clearly asks the tagged person for an action or an answer, for example:
+- "please take over this case"
+- "can you confirm / check / review / update this"
+- "please call the client" or "please share the documents with the client"
+- a question directed at them
+- work handed to them that they must pick up
 
-Be conservative. If nothing is clearly being asked of them, answer false.
+NO RESPONSE NEEDED (false) — and this is the common case:
+- a document is attached and the note simply names it, e.g. "@Name Excel Sheet",
+  "@Name checklist attached", "@Name CV". Handing over a document is NOT a request.
+- a CV summary, case summary, profile write-up or update shared for awareness
+- an FYI, a heads-up, a status update, or naming who handles the case
+- information about the client, what they said, or what happened
+- thanks or acknowledgement
+- the note names someone only so they can see it
+
+The test: is the tagged person being asked to DO or ANSWER something? A file, a summary
+or an update on its own is not a request, however it is worded. If you are not sure,
+answer false.
 
 Note:
 """${String(text || "").slice(0, 2000)}"""
 
-Reply ONLY JSON: {"needsResponse": true|false, "asks": "<what is being asked of them, max 12 words>"}`;
+Reply ONLY JSON: {"needsResponse": true|false, "asks": "<what they must do, max 12 words, empty if nothing>"}`;
 
 module.exports = async function checkMentions(d, ourTeamIds) {
   if (!SETTINGS.CHECK_MENTIONS || !d.available.notes) return [];
 
-  const minAge = Date.now() - SETTINGS.MENTION_MIN_AGE_HOURS * 3600000;
+  // bounded window: notes that have just passed the 48h mark, not ancient ones
+  const newest = Date.now() - SETTINGS.MENTION_MIN_AGE_HOURS * 3600000;
+  const oldest = SETTINGS.MENTION_MAX_AGE_HOURS
+    ? Date.now() - SETTINGS.MENTION_MAX_AGE_HOURS * 3600000 : 0;
   const team = new Set((ourTeamIds || []).map(String));
   const issues = [];
 
   // oldest first, so the earliest unanswered tag is reported
   const candidates = d.notes
-    .filter((n) => n.when && n.when <= minAge)                       // guard 1: old enough
+    .filter((n) => n.when && n.when <= newest && (!oldest || n.when >= oldest))  // guard 1: in the window
     .filter((n) => n.mentions && n.mentions.length)
     .filter((n) => !SETTINGS.MENTION_ONLY_OUR_TEAM ||                 // guard 2: our team only
       team.has(String(n.authorId)) || n.mentions.some((m) => team.has(String(m.id))))
@@ -62,7 +78,7 @@ module.exports = async function checkMentions(d, ourTeamIds) {
       if (answered) continue;
 
       // guard 4: was anything actually being asked of them?
-      const j = await askJson(PROMPT(note.text, m.name || "a colleague"));
+      const j = await askJson(PROMPT(note.text, m.name || "a colleague", note.attachments || 0));
       if (!j || !j.needsResponse) continue;
 
       const hours = Math.floor((Date.now() - note.when) / 3600000);
